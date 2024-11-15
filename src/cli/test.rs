@@ -8,16 +8,37 @@ pub async fn test_version_upgrade() {
 	let mut client = MapVersionClient {
 		fetch_mock: BTreeMap::new(),
 	};
-	client
-		.fetch_mock
-		.insert("latest".to_string(), || -> Result<String, Error> { Ok("1.0.0".to_string()) });
-	check_upgrade(&client, "1.0.0")
-		.await
-		.expect("Expected the versions to be the same and not require an upgrade");
-	check_upgrade(&client, "0.9.0")
-		.await
-		.expect_err("Expected the versions to be different and require an upgrade");
-	check_upgrade(&client, "1.1.0")
-		.await
-		.expect("Expected the versions to be illogical, and not require and upgrade");
+	client.fetch_mock.insert(
+		"latest".to_string(),
+		Box::new(|| -> Result<String, Error> { Ok("1.0.0".to_string()) }),
+	);
+
+	let test_cases = vec![("1.0.0", true), ("0.9.0", false), ("1.1.0", true)];
+
+	for (version, should_succeed) in test_cases {
+		let result = check_upgrade(&client, version).await;
+		if should_succeed {
+			assert!(result.is_ok(), "Test case for version {} failed", version);
+		} else {
+			assert!(result.is_err(), "Test case for version {} failed", version);
+		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use clap::CommandFactory;
+
+	#[test]
+	fn test_no_online_version_check_flag() {
+		let cli =
+			Cli::command().try_get_matches_from(vec!["test", "--no-online-version-check"]).unwrap();
+
+		let cli: Cli = Cli::from_arg_matches(&cli).unwrap();
+		assert!(
+			!cli.online_version_check,
+			"The online_version_check should be false when --no-online-version-check is passed"
+		);
+	}
 }
